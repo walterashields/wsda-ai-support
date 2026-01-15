@@ -1,28 +1,35 @@
 import { NextResponse } from "next/server";
-import { list } from "@vercel/blob";
 import { neon } from "@neondatabase/serverless";
 
 export const runtime = "edge";
 
-export async function POST() {
+export async function POST(req: Request) {
   try {
+    const { message } = await req.json();
+
     const sql = neon(process.env.DATABASE_URL!);
 
-    const blobs = await list({ prefix: "Course_1/" });
+    // Pull content from DB
+    const rows = await sql`
+      SELECT content, source
+      FROM documents
+      LIMIT 5
+    `;
 
-    for (const file of blobs.blobs) {
-      const res = await fetch(file.url);
-      const text = await res.text();
+    return NextResponse.json({
+      answer: "DB READ SUCCESS",
+      debug: {
+        rowsFound: rows.length,
+        sources: rows.map(r => r.source),
+        sample: rows[0]?.content?.slice(0, 300)
+      }
+    });
 
-      await sql`
-        INSERT INTO documents (content, source)
-        VALUES (${text}, ${file.pathname})
-      `;
-    }
-
-    return NextResponse.json({ success: true });
   } catch (err) {
     console.error(err);
-    return NextResponse.json({ error: "Ingest failed" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Chat failed" },
+      { status: 500 }
+    );
   }
 }
